@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v hyprctl >/dev/null 2>&1; then
+use_host_exec=false
+if command -v distrobox-host-exec >/dev/null 2>&1; then
+  use_host_exec=true
+fi
+
+if ! $use_host_exec && ! command -v hyprctl >/dev/null 2>&1; then
   echo "error: hyprctl not found" >&2
   exit 1
 fi
@@ -11,7 +16,11 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-hyprctl clients -j | python3 - <<'PY'
+if $use_host_exec; then
+  distrobox-host-exec hyprctl clients -j
+else
+  hyprctl clients -j
+fi | python3 - <<'PY'
 import json, sys
 
 clients = json.load(sys.stdin)
