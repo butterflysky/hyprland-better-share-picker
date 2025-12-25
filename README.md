@@ -1,5 +1,5 @@
 # hyprland-better-share-picker
-![Rust](https://img.shields.io/badge/Rust-Edition%202024-orange)
+![Rust](https://img.shields.io/badge/Rust-1.92.0%20(Edition%202024)-orange)
 
 A lightweight, memory-safe, pure‑Rust window picker for Hyprland. It is a drop‑in replacement for the default `hyprland-share-picker` used by `xdg-desktop-portal-hyprland`.
 
@@ -88,7 +88,7 @@ No configuration or environment variables are required for the prototype.
 ## Reproducible Builds
 This repository commits `Cargo.lock` to pin dependency versions and minimize surprises across machines or future builds. Use `cargo update` intentionally when you want to move dependency versions forward.
 
-We target the **latest stable Rust**. If a new stable release breaks the build, please open an issue and we will either fix forward or document a temporary workaround.
+We target the **latest stable Rust** as of December 25, 2025 (Rust 1.92.0). If a new stable release breaks the build, please open an issue and we will either fix forward or document a temporary workaround.
 
 ## Troubleshooting / Gotchas
 - **Portal does not call the picker**: Ensure `xdg-desktop-portal-hyprland` is running and you set `screencopy:custom_picker_binary` in `~/.config/hypr/xdph.conf` exactly (key name and spacing matter).
