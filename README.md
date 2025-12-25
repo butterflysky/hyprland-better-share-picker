@@ -35,7 +35,7 @@ This keeps the UI responsive and avoids complicated polling or unsafe cross‑th
 
 ## The “Magic” (Implementation Details)
 ### Protocol Generation
-The custom `hyprland-toplevel-export-v1.xml` protocol is compiled at build time. The build script writes a small Rust module into `OUT_DIR` and uses `wayland-scanner` to generate bindings.
+The custom `hyprland-toplevel-export-v1.xml` protocol is compiled at build time. The build script writes a small Rust module into `OUT_DIR` and uses `wayland-scanner` to generate bindings. By default we use the vendored protocol file under `third_party/hyprland-protocols/`, with a fallback to a project‑root XML if you want to override it locally.
 
 ### Thumbnails
 - `zwlr_foreign_toplevel_manager_v1` is used for **enumeration** only.
@@ -93,14 +93,25 @@ We target the **latest stable Rust** as of December 25, 2025 (Rust 1.92.0). If a
 ## Troubleshooting / Gotchas
 - **Portal does not call the picker**: Ensure `xdg-desktop-portal-hyprland` is running and you set `screencopy:custom_picker_binary` in `~/.config/hypr/xdph.conf` exactly (key name and spacing matter).
 - **No thumbnails / blank previews**: This prototype only consumes `wl_shm` buffers. If Hyprland exports DMA‑BUF only, you’ll need to add a DMA‑BUF import path.
-- **Protocol file missing**: The build requires `hyprland-toplevel-export-v1.xml` in the project root. If it’s absent, protocol bindings won’t generate.
+- **Protocol file missing**: The build expects `third_party/hyprland-protocols/hyprland-toplevel-export-v1.xml` (vendored) or a project‑root `hyprland-toplevel-export-v1.xml` override. If neither exists, protocol bindings won’t generate.
 - **Wrong binary path**: The portal uses the literal string path from `xdph.conf`. Absolute paths are safest.
 - **No output on selection**: The picker prints a `wayland:0x...` handle to STDOUT and exits immediately. If you wrap the binary, ensure stdout is not redirected or swallowed.
 
 ## Project Layout
 - `build.rs` — Generates protocol bindings for `hyprland-toplevel-export-v1.xml`.
+- `third_party/hyprland-protocols/` — Vendored Hyprland protocol XML + license.
 - `src/main.rs` — Iced UI, selection handling, cancellation behavior.
 - `src/wayland.rs` — Wayland connection, toplevel discovery, thumbnail capture.
+
+## Vendored Protocols
+We vendor the Hyprland protocol XML to keep builds reproducible and to avoid relying on network access at compile time. The vendored files are copied from the upstream Hyprland protocols repository at a pinned commit, and we include its license in `third_party/hyprland-protocols/LICENSE`.
+
+Source (pinned):
+```
+repo: https://github.com/hyprwm/hyprland-protocols
+commit: 3f3860b869014c00e8b9e0528c7b4ddc335c21ab
+file: protocols/hyprland-toplevel-export-v1.xml
+```
 
 ## Rationale for Key Technical Choices (ADR)
 ### Rust 2024

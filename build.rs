@@ -1,10 +1,15 @@
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
     let dest = out_dir.join("hyprland_toplevel_export.rs");
+
+    let vendored = Path::new("third_party/hyprland-protocols/hyprland-toplevel-export-v1.xml");
+    let root = Path::new("hyprland-toplevel-export-v1.xml");
+    let xml_path = if vendored.exists() { vendored } else { root };
 
     let contents = r#"
 // Generated via build.rs. The actual bindings are produced by wayland-scanner
@@ -22,6 +27,8 @@ pub mod hyprland_toplevel_export {
 }
 "#;
 
+    let contents = contents.replace("./hyprland-toplevel-export-v1.xml", &xml_path.display().to_string());
     fs::write(dest, contents).expect("failed to write generated protocol module");
     println!("cargo:rerun-if-changed=hyprland-toplevel-export-v1.xml");
+    println!("cargo:rerun-if-changed=third_party/hyprland-protocols/hyprland-toplevel-export-v1.xml");
 }
