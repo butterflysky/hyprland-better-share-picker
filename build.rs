@@ -15,10 +15,16 @@ fn main() {
 // Generated via build.rs. The actual bindings are produced by wayland-scanner
 // at compile time using the XML protocol from the project root.
 pub mod hyprland_toplevel_export {
+    use bitflags as bitflags;
+    use wayland_backend as wayland_backend;
+    use wayland_client as wayland_client;
+    use wayland_protocols_wlr::foreign_toplevel::v1::client::__interfaces::*;
+    use wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1;
     use wayland_client::protocol::*;
 
     pub mod __interfaces {
         use wayland_client::protocol::__interfaces::*;
+        use wayland_protocols_wlr::foreign_toplevel::v1::client::__interfaces::*;
         wayland_scanner::generate_interfaces!("./hyprland-toplevel-export-v1.xml");
     }
 

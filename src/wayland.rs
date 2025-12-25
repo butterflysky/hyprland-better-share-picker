@@ -1,7 +1,8 @@
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, StreamExt};
 use iced::{stream, Subscription};
-use smithay_client_toolkit::globals::{GlobalError, ProvidesBoundGlobal};
+use smithay_client_toolkit::error::GlobalError;
+use smithay_client_toolkit::globals::ProvidesBoundGlobal;
 use smithay_client_toolkit::shm::slot::{Buffer, SlotPool};
 use std::collections::HashMap;
 use wayland_client::globals::registry_queue_init;

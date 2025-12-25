@@ -1,7 +1,7 @@
 mod wayland;
 
 use iced::widget::{button, column, container, image, row, scrollable, text};
-use iced::{keyboard, Alignment, Element, Length, Subscription, Task};
+use iced::{keyboard, Alignment, Element, Event, Length, Subscription, Task};
 use std::io::{self, Write};
 use wayland::{WaylandEvent, WindowThumbnail};
 
@@ -9,6 +9,7 @@ use wayland::{WaylandEvent, WindowThumbnail};
 enum Message {
     Wayland(WaylandEvent),
     Select(u32),
+    UiEvent(Event),
     Cancel,
     CloseRequested,
 }
@@ -36,6 +37,13 @@ impl App {
         match message {
             Message::Wayland(event) => {
                 self.apply_wayland_event(event);
+            }
+            Message::UiEvent(event) => {
+                if let Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) = event {
+                    if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                        std::process::exit(1);
+                    }
+                }
             }
             Message::Select(id) => {
                 print!("wayland:0x{:x}\n", id);
@@ -135,13 +143,7 @@ impl App {
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch(vec![
             wayland::subscription().map(Message::Wayland),
-            keyboard::on_key_press(|key, _| {
-                if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
-                    Some(Message::Cancel)
-                } else {
-                    None
-                }
-            }),
+            iced::event::listen().map(Message::UiEvent),
             iced::window::close_requests().map(|_| Message::CloseRequested),
         ])
     }
