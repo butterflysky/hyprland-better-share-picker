@@ -26,7 +26,8 @@ pub enum WaylandEvent {
     Upsert { id: u32, title: String, app_id: String },
     Remove { id: u32 },
     Thumbnail {
-        id: u32,
+        title: String,
+        app_id: String,
         width: u32,
         height: u32,
         rgba: Vec<u8>,
@@ -179,12 +180,15 @@ impl WaylandState {
     }
 
     fn send_thumbnail(&self, id: u32, width: u32, height: u32, rgba: Vec<u8>) {
-        let _ = self.sender.unbounded_send(WaylandEvent::Thumbnail {
-            id,
-            width,
-            height,
-            rgba,
-        });
+        if let Some(entry) = self.toplevels.get(&id) {
+            let _ = self.sender.unbounded_send(WaylandEvent::Thumbnail {
+                title: entry.title.clone(),
+                app_id: entry.app_id.clone(),
+                width,
+                height,
+                rgba,
+            });
+        }
     }
 
     fn send_remove(&self, id: u32) {

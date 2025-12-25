@@ -10,20 +10,21 @@ enum Message {
     Wayland(WaylandEvent),
     Select(u32),
     UiEvent(Event),
-    Cancel,
     CloseRequested,
 }
 
 #[derive(Debug, Clone)]
 struct WindowEntry {
-    id: u32,
+    handle_lo: u32,
+    class: String,
     title: String,
-    app_id: String,
+    mapped_id: u64,
     thumbnail: Option<WindowThumbnail>,
 }
 
 struct App {
     windows: Vec<WindowEntry>,
+    allow_token: bool,
 }
 
 fn main() -> iced::Result {
@@ -36,7 +37,8 @@ impl App {
     fn new() -> (Self, Task<Message>) {
         (
             Self {
-                windows: Vec::new(),
+                windows: parse_window_list(),
+                allow_token: std::env::args().any(|arg| arg == "--allow-token"),
             },
             Task::none(),
         )
@@ -55,11 +57,12 @@ impl App {
                 }
             }
             Message::Select(id) => {
-                print!("wayland:0x{:x}\n", id);
+                let flags = if self.allow_token { "r" } else { "" };
+                print!("[SELECTION]{}/window:{}\n", flags, id);
                 let _ = io::stdout().flush();
                 std::process::exit(0);
             }
-            Message::Cancel | Message::CloseRequested => {
+            Message::CloseRequested => {
                 std::process::exit(1);
             }
         }
@@ -69,33 +72,19 @@ impl App {
 
     fn apply_wayland_event(&mut self, event: WaylandEvent) {
         match event {
-            WaylandEvent::Upsert {
-                id,
+            WaylandEvent::Upsert { .. } | WaylandEvent::Remove { .. } => {}
+            WaylandEvent::Thumbnail {
                 title,
                 app_id,
-            } => {
-                if let Some(existing) = self.windows.iter_mut().find(|w| w.id == id) {
-                    existing.title = title;
-                    existing.app_id = app_id;
-                } else {
-                    self.windows.push(WindowEntry {
-                        id,
-                        title,
-                        app_id,
-                        thumbnail: None,
-                    });
-                }
-            }
-            WaylandEvent::Remove { id } => {
-                self.windows.retain(|w| w.id != id);
-            }
-            WaylandEvent::Thumbnail {
-                id,
                 width,
                 height,
                 rgba,
             } => {
-                if let Some(existing) = self.windows.iter_mut().find(|w| w.id == id) {
+                if let Some(existing) = self
+                    .windows
+                    .iter_mut()
+                    .find(|w| w.class == app_id && w.title == title)
+                {
                     existing.thumbnail = Some(WindowThumbnail::new(width, height, rgba));
                 }
             }
@@ -129,13 +118,23 @@ impl App {
                 window.title.as_str()
             };
 
-            let card = column![thumb, text(title).size(16)]
+            let subtitle = if window.class.is_empty() {
+                ""
+            } else {
+                window.class.as_str()
+            };
+
+            let card = column![
+                thumb,
+                text(title).size(16),
+                text(subtitle).size(12)
+            ]
                 .width(Length::Fixed(220.0))
                 .spacing(8)
                 .align_x(Alignment::Center);
 
             let button = button(card)
-                .on_press(Message::Select(window.id))
+                .on_press(Message::Select(window.handle_lo))
                 .padding(8);
 
             tiles = tiles.push(button);
@@ -165,6 +164,45 @@ impl Default for App {
     fn default() -> Self {
         Self {
             windows: Vec::new(),
+            allow_token: false,
         }
     }
+}
+
+fn parse_window_list() -> Vec<WindowEntry> {
+    let raw = std::env::var("XDPH_WINDOW_SHARING_LIST").unwrap_or_default();
+    let mut entries = Vec::new();
+    let mut input = raw.as_str();
+
+    while let Some(hc) = input.find("[HC>]") {
+        let (handle_str, rest) = input.split_at(hc);
+        let handle_lo = handle_str.trim().parse::<u32>().unwrap_or(0);
+        let rest = &rest["[HC>]".len()..];
+
+        let Some(ht_pos) = rest.find("[HT>]") else { break };
+        let (class, rest) = rest.split_at(ht_pos);
+        let rest = &rest["[HT>]".len()..];
+
+        let Some(he_pos) = rest.find("[HE>]") else { break };
+        let (title, rest) = rest.split_at(he_pos);
+        let rest = &rest["[HE>]".len()..];
+
+        let Some(ha_pos) = rest.find("[HA>]") else { break };
+        let (mapped, rest) = rest.split_at(ha_pos);
+        let rest = &rest["[HA>]".len()..];
+
+        let mapped_id = mapped.trim().parse::<u64>().unwrap_or(0);
+
+        entries.push(WindowEntry {
+            handle_lo,
+            class: class.to_string(),
+            title: title.to_string(),
+            mapped_id,
+            thumbnail: None,
+        });
+
+        input = rest;
+    }
+
+    entries
 }

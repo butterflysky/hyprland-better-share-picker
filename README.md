@@ -15,7 +15,8 @@ This tool is built around two core systems that must cooperate without blocking 
 
 1) **Wayland discovery and capture (synchronous)**
 - We connect to the compositor via `wayland-client` and `smithay-client-toolkit` (SCTK).
-- The `zwlr_foreign_toplevel_manager_v1` protocol provides **toplevel discovery** (window list, titles, app IDs).
+- The portal provides the canonical window list via `XDPH_WINDOW_SHARING_LIST`; we parse it for selection IDs and labels.
+- The `zwlr_foreign_toplevel_manager_v1` protocol is used **only for thumbnails** (best‑effort title/app_id matching).
 - The custom `hyprland-toplevel-export-v1` protocol provides **pixel buffers** for thumbnails.
 - The Wayland event queue uses a **blocking dispatch loop**. This is the most reliable way to integrate with the compositor and avoids re-implementing a custom Wayland poller.
 
@@ -38,7 +39,8 @@ This keeps the UI responsive and avoids complicated polling or unsafe cross‑th
 The custom `hyprland-toplevel-export-v1.xml` protocol is compiled at build time. The build script writes a small Rust module into `OUT_DIR` and uses `wayland-scanner` to generate bindings. By default we use the vendored protocol file under `third_party/hyprland-protocols/`, with a fallback to a project‑root XML if you want to override it locally.
 
 ### Thumbnails
-- `zwlr_foreign_toplevel_manager_v1` is used for **enumeration** only.
+- `XDPH_WINDOW_SHARING_LIST` is the source of truth for selection IDs.
+- `zwlr_foreign_toplevel_manager_v1` is used as a best‑effort source of titles/app IDs to associate thumbnails.
 - `hyprland-toplevel-export-v1` is used to **capture** a single frame for each toplevel.
 - We currently accept **`wl_shm` buffers** (`ARGB8888` / `XRGB8888`). DMA‑BUF support can be added later if your compositor only exposes GPU buffers.
 
@@ -46,16 +48,22 @@ The custom `hyprland-toplevel-export-v1.xml` protocol is compiled at build time.
 To avoid flooding the compositor, each toplevel is captured **once** on discovery. This provides a responsive UI without the load of continuous screencopy or live previews. This is intentionally conservative and can be extended with a “refresh” action if needed.
 
 ## Integration with xdg-desktop-portal-hyprland
-The portal consumes the picker’s result by reading **STDOUT** and the exit code.
+The portal consumes the picker’s result by reading **STDOUT** and the exit code. It also provides the list of shareable windows via an environment variable.
 
-When a user clicks a window:
-- The picker prints a handle like `wayland:0x...` to STDOUT.
-- The process exits with code `0`.
+### Environment
+`XDPH_WINDOW_SHARING_LIST` contains a serialized list of toplevels the portal wants exposed to the picker. Each entry is encoded as:
+```
+<handle_lo>[HC>]<class>[HT>]<title>[HE>]<mapped_id>[HA>]
+```
 
-When the user cancels:
-- The process exits with code `1`.
+### Output contract
+When a user clicks a window, the picker prints:
+```
+[SELECTION]{flags}/window:<handle_lo>
+```
+where `{flags}` is `r` if `--allow-token` was provided, otherwise empty. It then exits with code `0`.
 
-This mirrors the behavior expected by `xdg-desktop-portal-hyprland`.
+When the user cancels, the picker exits with code `1`.
 
 ## Installation
 ### Build
