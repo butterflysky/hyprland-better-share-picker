@@ -127,8 +127,35 @@ XDPH_WINDOW_SHARING_LIST=\"$(scripts/build-xdph-window-list.sh)\" \\
 Note: this uses Hyprland’s client list to build entries. The `handle_lo` values are derived from the client address and are sufficient for UI testing, but they may not map back to the portal’s internal toplevel handle resolution.
 
 ## Planned Improvements
-- More robust thumbnail matching (ranking, tie‑breakers, and partial/fuzzy matching when titles change).
-- Optional DMA‑BUF import path for GPU-backed thumbnails when `wl_shm` is unavailable.
+### ADR: Future Work
+This section captures follow‑up decisions we expect to make once the prototype stabilizes.
+
+1) **Improve thumbnail legibility (UI + capture strategy)**
+   - **Why**: The current thumbnails are sometimes hard to read at a glance.
+   - **Options**:
+     - Increase thumbnail size or allow zoom-on-hover.
+     - Add a subtle background/contrast frame to separate the preview from the UI.
+     - Capture at a higher resolution and downscale on the client (clearer text).
+   - **Tradeoff**: Larger or higher‑resolution captures increase compositor and CPU load.
+
+2) **Robust thumbnail matching**
+   - **Why**: Matching by `(class, title)` can be ambiguous (duplicate titles, rapid title changes).
+   - **Options**:
+     - Ranking/heuristics (exact match first, then class-only/title-only).
+     - Keep a short‑lived cache of recent titles to reduce flicker.
+   - **Tradeoff**: More logic and potential false positives; still no perfect mapping without protocol support.
+
+3) **DMA‑BUF import path**
+   - **Why**: Some compositors export only GPU buffers; current code supports `wl_shm` only.
+   - **Options**:
+     - Import DMA‑BUF via EGL + wgpu or direct dmabuf→CPU staging.
+   - **Tradeoff**: Significant implementation complexity and extra dependencies.
+
+4) **Optional explicit portal integration**
+   - **Why**: The portal is the source of truth for selection handles.
+   - **Options**:
+     - Upstream portal change to expose stable IDs/mapping to pickers.
+   - **Tradeoff**: Requires coordination upstream, outside the scope of this repo.
 
 ## Project Layout
 - `build.rs` — Generates protocol bindings for `hyprland-toplevel-export-v1.xml`.
