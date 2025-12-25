@@ -112,7 +112,16 @@ We target the **latest stable Rust** as of December 25, 2025 (Rust 1.92.0). If a
 - **Protocol file missing**: The build expects `third_party/hyprland-protocols/hyprland-toplevel-export-v1.xml` (vendored) or a project‑root `hyprland-toplevel-export-v1.xml` override. If neither exists, protocol bindings won’t generate.
 - **libxkbcommon missing at link time**: Install the runtime library inside the build/run environment (e.g., inside your `distrobox` container), not just on the host.
 - **Wrong binary path**: The portal uses the literal string path from `xdph.conf`. Absolute paths are safest.
-- **No output on selection**: The picker prints a `wayland:0x...` handle to STDOUT and exits immediately. If you wrap the binary, ensure stdout is not redirected or swallowed.
+- **No output on selection**: The picker prints a `[SELECTION]...` line to STDOUT and exits immediately. If you wrap the binary, ensure stdout is not redirected or swallowed.
+
+## Testing Helpers
+If you want to launch the picker outside the portal for UI testing, you can populate `XDPH_WINDOW_SHARING_LIST` from live Hyprland clients:
+```bash
+XDPH_WINDOW_SHARING_LIST=\"$(scripts/build-xdph-window-list.sh)\" \\
+  cargo run --release
+```
+
+Note: this uses Hyprland’s client list to build entries. The `handle_lo` values are derived from the client address and are sufficient for UI testing, but they may not map back to the portal’s internal toplevel handle resolution.
 
 ## Project Layout
 - `build.rs` — Generates protocol bindings for `hyprland-toplevel-export-v1.xml`.
