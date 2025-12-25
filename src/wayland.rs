@@ -6,6 +6,7 @@ use smithay_client_toolkit::error::GlobalError;
 use smithay_client_toolkit::globals::ProvidesBoundGlobal;
 use smithay_client_toolkit::shm::slot::{Buffer, SlotPool};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::globals::GlobalListContents;
 use wayland_client::protocol::{wl_registry, wl_shm};
@@ -50,6 +51,21 @@ impl WindowThumbnail {
 
 pub fn subscription() -> Subscription<WaylandEvent> {
     Subscription::run(wayland_stream)
+}
+
+fn debug_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("HBSP_DEBUG")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
+fn debug_log(message: &str) {
+    if debug_enabled() {
+        eprintln!("{message}");
+    }
 }
 
 fn wayland_stream() -> impl iced::futures::Stream<Item = WaylandEvent> {
@@ -354,10 +370,10 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
                 } => {
                     if let Some(frame) = state.pending_frames.get_mut(&id) {
                         if let WEnum::Unknown(value) = format {
-                            eprintln!(
+                            debug_log(&format!(
                                 "hyprland-export: unknown shm format {} (expected ARGB/XRGB)",
                                 value
-                            );
+                            ));
                         }
                         frame.format = match format {
                             WEnum::Value(value) => Some(value),
@@ -394,7 +410,7 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
                         Some(wl_shm::Format::Argb8888) => wl_shm::Format::Argb8888,
                         Some(wl_shm::Format::Xrgb8888) => wl_shm::Format::Xrgb8888,
                         _ => {
-                            eprintln!("hyprland-export: unsupported shm format; skipping thumbnail");
+                            debug_log("hyprland-export: unsupported shm format; skipping thumbnail");
                             proxy.destroy();
                             return;
                         }
@@ -434,7 +450,7 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
                 state.pending_frames.remove(&id);
             }
             hyprland_toplevel_export_frame_v1::Event::Failed => {
-                eprintln!("hyprland-export: capture failed for a toplevel");
+                debug_log("hyprland-export: capture failed for a toplevel");
                 proxy.destroy();
                 state.pending_frames.remove(&id);
             }
