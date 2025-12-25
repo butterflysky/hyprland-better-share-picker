@@ -44,6 +44,9 @@ The custom `hyprland-toplevel-export-v1.xml` protocol is compiled at build time.
 - `hyprland-toplevel-export-v1` is used to **capture** a single frame for each toplevel.
 - We currently accept **`wl_shm` buffers** (`ARGB8888` / `XRGB8888`). DMA‑BUF support can be added later if your compositor only exposes GPU buffers.
 
+### Matching Strategy (and limitations)
+The portal only provides **lower 32‑bit handles** plus class/title strings. The export protocol does not expose the toplevel handle in its frame metadata. As a result, thumbnails are matched by **(class, title)**, which can be ambiguous when multiple windows share the same title or when titles change frequently. This is a known limitation in the current prototype.
+
 ### Lazy Loading
 To avoid flooding the compositor, each toplevel is captured **once** on discovery. This provides a responsive UI without the load of continuous screencopy or live previews. This is intentionally conservative and can be extended with a “refresh” action if needed.
 
@@ -122,6 +125,10 @@ XDPH_WINDOW_SHARING_LIST=\"$(scripts/build-xdph-window-list.sh)\" \\
 ```
 
 Note: this uses Hyprland’s client list to build entries. The `handle_lo` values are derived from the client address and are sufficient for UI testing, but they may not map back to the portal’s internal toplevel handle resolution.
+
+## Planned Improvements
+- More robust thumbnail matching (ranking, tie‑breakers, and partial/fuzzy matching when titles change).
+- Optional DMA‑BUF import path for GPU-backed thumbnails when `wl_shm` is unavailable.
 
 ## Project Layout
 - `build.rs` — Generates protocol bindings for `hyprland-toplevel-export-v1.xml`.
