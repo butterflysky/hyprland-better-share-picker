@@ -113,6 +113,11 @@ commit: 3f3860b869014c00e8b9e0528c7b4ddc335c21ab
 file: protocols/hyprland-toplevel-export-v1.xml
 ```
 
+To update the vendored protocol file, run:
+```
+scripts/update-protocol.sh <commit-or-tag>
+```
+
 ## Rationale for Key Technical Choices (ADR)
 ### Rust 2024
 Rust 2024 is chosen to keep the project future‑proof and aligned with the latest language ergonomics. The current code uses an event-driven structure that benefits from modern Rust features and clean async interop.
