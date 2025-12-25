@@ -85,6 +85,9 @@ This matches the portal’s invocation path (see the `ScreencopyShared.cpp` pick
 ## Configuration
 No configuration or environment variables are required for the prototype.
 
+## Reproducible Builds
+This repository commits `Cargo.lock` to pin dependency versions and minimize surprises across machines or future builds. Use `cargo update` intentionally when you want to move dependency versions forward.
+
 ## Troubleshooting / Gotchas
 - **Portal does not call the picker**: Ensure `xdg-desktop-portal-hyprland` is running and you set `screencopy:custom_picker_binary` in `~/.config/hypr/xdph.conf` exactly (key name and spacing matter).
 - **No thumbnails / blank previews**: This prototype only consumes `wl_shm` buffers. If Hyprland exports DMA‑BUF only, you’ll need to add a DMA‑BUF import path.
