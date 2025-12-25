@@ -27,12 +27,21 @@ struct App {
 }
 
 fn main() -> iced::Result {
-    iced::application("Hyprland Better Share Picker", App::update, App::view)
+    iced::application(App::new, App::update, App::view)
         .subscription(App::subscription)
         .run()
 }
 
 impl App {
+    fn new() -> (Self, Task<Message>) {
+        (
+            Self {
+                windows: Vec::new(),
+            },
+            Task::none(),
+        )
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Wayland(event) => {
@@ -97,7 +106,7 @@ impl App {
     }
 
     fn view(&self) -> Element<Message> {
-        let mut tiles = row!().spacing(16).wrap();
+        let mut tiles = row!().spacing(16);
 
         for window in &self.windows {
             let thumb: Element<_> = if let Some(thumbnail) = &window.thumbnail {
@@ -109,8 +118,8 @@ impl App {
                 let placeholder = container(text("No preview").size(14))
                     .width(Length::Fixed(220.0))
                     .height(Length::Fixed(140.0))
-                    .center_x()
-                    .center_y();
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill);
                 placeholder.into()
             };
 
@@ -123,7 +132,7 @@ impl App {
             let card = column![thumb, text(title).size(16)]
                 .width(Length::Fixed(220.0))
                 .spacing(8)
-                .align_items(Alignment::Center);
+                .align_x(Alignment::Center);
 
             let button = button(card)
                 .on_press(Message::Select(window.id))
@@ -132,12 +141,15 @@ impl App {
             tiles = tiles.push(button);
         }
 
-        let content = scrollable(tiles)
+        let content = scrollable(tiles.wrap())
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(16);
-
-        container(content).width(Length::Fill).height(Length::Fill).into()
+            .padding(16)
+            .into()
     }
 
     fn subscription(&self) -> Subscription<Message> {

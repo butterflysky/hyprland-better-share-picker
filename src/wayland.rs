@@ -1,6 +1,7 @@
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, StreamExt};
-use iced::{stream, Subscription};
+use iced::stream;
+use iced::Subscription;
 use smithay_client_toolkit::error::GlobalError;
 use smithay_client_toolkit::globals::ProvidesBoundGlobal;
 use smithay_client_toolkit::shm::slot::{Buffer, SlotPool};
@@ -8,7 +9,7 @@ use std::collections::HashMap;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::globals::GlobalListContents;
 use wayland_client::protocol::{wl_registry, wl_shm};
-use wayland_client::{Connection, Dispatch, QueueHandle};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum};
 use wayland_protocols_wlr::foreign_toplevel::v1::client::{
     zwlr_foreign_toplevel_handle_v1, zwlr_foreign_toplevel_manager_v1,
 };
@@ -41,31 +42,32 @@ pub struct WindowThumbnail {
 impl WindowThumbnail {
     pub fn new(width: u32, height: u32, rgba: Vec<u8>) -> Self {
         Self {
-            handle: iced::widget::image::Handle::from_pixels(width, height, rgba),
+            handle: iced::widget::image::Handle::from_rgba(width, height, rgba),
         }
     }
 }
 
 pub fn subscription() -> Subscription<WaylandEvent> {
-    Subscription::run(|| {
-        stream::channel(100, |mut output| async move {
-            let (tx, mut rx) = mpsc::unbounded::<WaylandEvent>();
-
-            std::thread::spawn(move || {
-                if let Err(error) = run_wayland(tx.clone()) {
-                    let _ = tx.unbounded_send(WaylandEvent::Error {
-                        message: error.to_string(),
-                    });
-                }
-            });
-
-            while let Some(event) = rx.next().await {
-                let _ = output.send(event).await;
-            }
-        })
-    })
+    Subscription::run(wayland_stream)
 }
 
+fn wayland_stream() -> impl iced::futures::Stream<Item = WaylandEvent> {
+    stream::channel(100, |mut output: iced::futures::channel::mpsc::Sender<WaylandEvent>| async move {
+        let (tx, mut rx) = mpsc::unbounded::<WaylandEvent>();
+
+        std::thread::spawn(move || {
+            if let Err(error) = run_wayland(tx.clone()) {
+                let _ = tx.unbounded_send(WaylandEvent::Error {
+                    message: error.to_string(),
+                });
+            }
+        });
+
+        while let Some(event) = rx.next().await {
+            let _ = output.send(event).await;
+        }
+    })
+}
 fn run_wayland(
     sender: mpsc::UnboundedSender<WaylandEvent>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -101,6 +103,7 @@ struct WaylandState {
     toplevels: HashMap<u32, ToplevelEntry>,
     pending_frames: HashMap<u32, PendingFrame>,
     slot_pool: Option<SlotPool>,
+    slot_pool_size: usize,
 }
 
 impl WaylandState {
@@ -118,17 +121,25 @@ impl WaylandState {
             toplevels: HashMap::new(),
             pending_frames: HashMap::new(),
             slot_pool: None,
+            slot_pool_size: 0,
         }
     }
 
     fn ensure_slot_pool(&mut self, size: usize) -> &mut SlotPool {
-        let pool = self.slot_pool.get_or_insert_with(|| {
-            SlotPool::new(size, self).expect("failed to create shm pool")
-        });
-        if pool.size() < size {
-            pool.resize(size).expect("failed to resize shm pool");
+        if self.slot_pool.is_none() {
+            let pool = SlotPool::new(size, self).expect("failed to create shm pool");
+            self.slot_pool = Some(pool);
+            self.slot_pool_size = size;
         }
-        pool
+        if self.slot_pool_size < size {
+            self.slot_pool
+                .as_mut()
+                .expect("slot pool missing")
+                .resize(size)
+                .expect("failed to resize shm pool");
+            self.slot_pool_size = size;
+        }
+        self.slot_pool.as_mut().expect("slot pool missing")
     }
 
     fn request_thumbnail(
@@ -275,11 +286,15 @@ impl Dispatch<zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1, ()> 
             match event {
                 zwlr_foreign_toplevel_handle_v1::Event::Title { title } => {
                     entry.title = title;
-                    state.send_upsert(id, &entry.title, &entry.app_id);
+                    let title = entry.title.clone();
+                    let app_id = entry.app_id.clone();
+                    state.send_upsert(id, &title, &app_id);
                 }
                 zwlr_foreign_toplevel_handle_v1::Event::AppId { app_id } => {
                     entry.app_id = app_id;
-                    state.send_upsert(id, &entry.title, &entry.app_id);
+                    let title = entry.title.clone();
+                    let app_id = entry.app_id.clone();
+                    state.send_upsert(id, &title, &app_id);
                 }
                 zwlr_foreign_toplevel_handle_v1::Event::Closed => {
                     state.toplevels.remove(&id);
@@ -313,75 +328,96 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
         _qh: &QueueHandle<Self>,
     ) {
         let id = proxy.id().protocol_id();
-        if let Some(frame) = state.pending_frames.get_mut(&id) {
-            match event {
-                hyprland_toplevel_export_frame_v1::Event::Buffer {
-                    format,
-                    width,
-                    height,
-                    stride,
-                } => {
-                    frame.format = Some(format);
+        if !state.pending_frames.contains_key(&id) {
+            return;
+        }
+
+        match event {
+            hyprland_toplevel_export_frame_v1::Event::Buffer {
+                format,
+                width,
+                height,
+                stride,
+            } => {
+                if let Some(frame) = state.pending_frames.get_mut(&id) {
+                    frame.format = match format {
+                        WEnum::Value(value) => Some(value),
+                        _ => None,
+                    };
                     frame.width = width;
                     frame.height = height;
                     frame.stride = stride;
                 }
-                hyprland_toplevel_export_frame_v1::Event::Flags { flags } => {
-                    frame.y_invert = flags
-                        .contains(hyprland_toplevel_export_frame_v1::Flags::YInvert);
+            }
+            hyprland_toplevel_export_frame_v1::Event::Flags { flags } => {
+                if let Some(frame) = state.pending_frames.get_mut(&id) {
+                    if let WEnum::Value(value) = flags {
+                        frame.y_invert =
+                            value.contains(hyprland_toplevel_export_frame_v1::Flags::YInvert);
+                    }
                 }
-                hyprland_toplevel_export_frame_v1::Event::BufferDone => {
-                    if frame.buffer.is_some() {
+            }
+            hyprland_toplevel_export_frame_v1::Event::BufferDone => {
+                let (width, height, stride, format, has_buffer) = {
+                    let frame = state.pending_frames.get(&id).expect("frame missing");
+                    (
+                        frame.width,
+                        frame.height,
+                        frame.stride,
+                        frame.format,
+                        frame.buffer.is_some(),
+                    )
+                };
+                if has_buffer {
+                    return;
+                }
+                let format = match format {
+                    Some(wl_shm::Format::Argb8888) => wl_shm::Format::Argb8888,
+                    Some(wl_shm::Format::Xrgb8888) => wl_shm::Format::Xrgb8888,
+                    _ => {
+                        proxy.destroy();
                         return;
                     }
-                    let format = match frame.format {
-                        Some(wl_shm::Format::Argb8888) => wl_shm::Format::Argb8888,
-                        Some(wl_shm::Format::Xrgb8888) => wl_shm::Format::Xrgb8888,
-                        _ => {
-                            proxy.destroy();
-                            return;
-                        }
-                    };
+                };
 
-                    let size = (frame.stride * frame.height) as usize;
-                    let pool = state.ensure_slot_pool(size);
-                    let (buffer, _) = pool
-                        .create_buffer(
-                            frame.width as i32,
-                            frame.height as i32,
-                            frame.stride as i32,
-                            format,
-                        )
-                        .expect("failed to create shm buffer");
+                let size = (stride * height) as usize;
+                let pool = state.ensure_slot_pool(size);
+                let (buffer, _) = pool
+                    .create_buffer(width as i32, height as i32, stride as i32, format)
+                    .expect("failed to create shm buffer");
 
-                    proxy.copy(buffer.wl_buffer(), 0);
+                proxy.copy(buffer.wl_buffer(), 0);
+                if let Some(frame) = state.pending_frames.get_mut(&id) {
                     frame.buffer = Some(buffer);
                 }
-                hyprland_toplevel_export_frame_v1::Event::Ready { .. } => {
-                    if let (Some(buffer), Some(pool)) =
-                        (frame.buffer.take(), state.slot_pool.as_mut())
-                    {
-                        if let Some(data) = buffer.canvas(pool) {
-                            let rgba = convert_to_rgba(
-                                data,
-                                frame.width,
-                                frame.height,
-                                frame.stride,
-                                frame.format.unwrap_or(wl_shm::Format::Argb8888),
-                                frame.y_invert,
-                            );
-                            state.send_thumbnail(frame.toplevel_id, frame.width, frame.height, rgba);
-                        }
-                    }
-                    proxy.destroy();
-                    state.pending_frames.remove(&id);
-                }
-                hyprland_toplevel_export_frame_v1::Event::Failed => {
-                    proxy.destroy();
-                    state.pending_frames.remove(&id);
-                }
-                _ => {}
             }
+            hyprland_toplevel_export_frame_v1::Event::Ready { .. } => {
+                let (buffer, width, height, stride, format, y_invert, toplevel_id) = {
+                    let frame = state.pending_frames.get_mut(&id).expect("frame missing");
+                    (
+                        frame.buffer.take(),
+                        frame.width,
+                        frame.height,
+                        frame.stride,
+                        frame.format.unwrap_or(wl_shm::Format::Argb8888),
+                        frame.y_invert,
+                        frame.toplevel_id,
+                    )
+                };
+                if let (Some(buffer), Some(pool)) = (buffer, state.slot_pool.as_mut()) {
+                    if let Some(data) = buffer.canvas(pool) {
+                        let rgba = convert_to_rgba(data, width, height, stride, format, y_invert);
+                        state.send_thumbnail(toplevel_id, width, height, rgba);
+                    }
+                }
+                proxy.destroy();
+                state.pending_frames.remove(&id);
+            }
+            hyprland_toplevel_export_frame_v1::Event::Failed => {
+                proxy.destroy();
+                state.pending_frames.remove(&id);
+            }
+            _ => {}
         }
     }
 }
