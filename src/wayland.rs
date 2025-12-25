@@ -346,18 +346,24 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
         }
 
         match event {
-            hyprland_toplevel_export_frame_v1::Event::Buffer {
-                format,
-                width,
-                height,
-                stride,
-            } => {
-                if let Some(frame) = state.pending_frames.get_mut(&id) {
-                    frame.format = match format {
-                        WEnum::Value(value) => Some(value),
-                        _ => None,
-                    };
-                    frame.width = width;
+                hyprland_toplevel_export_frame_v1::Event::Buffer {
+                    format,
+                    width,
+                    height,
+                    stride,
+                } => {
+                    if let Some(frame) = state.pending_frames.get_mut(&id) {
+                        if let WEnum::Unknown(value) = format {
+                            eprintln!(
+                                "hyprland-export: unknown shm format {} (expected ARGB/XRGB)",
+                                value
+                            );
+                        }
+                        frame.format = match format {
+                            WEnum::Value(value) => Some(value),
+                            _ => None,
+                        };
+                        frame.width = width;
                     frame.height = height;
                     frame.stride = stride;
                 }
@@ -370,11 +376,11 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
                     }
                 }
             }
-            hyprland_toplevel_export_frame_v1::Event::BufferDone => {
-                let (width, height, stride, format, has_buffer) = {
-                    let frame = state.pending_frames.get(&id).expect("frame missing");
-                    (
-                        frame.width,
+                hyprland_toplevel_export_frame_v1::Event::BufferDone => {
+                    let (width, height, stride, format, has_buffer) = {
+                        let frame = state.pending_frames.get(&id).expect("frame missing");
+                        (
+                            frame.width,
                         frame.height,
                         frame.stride,
                         frame.format,
@@ -384,14 +390,15 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
                 if has_buffer {
                     return;
                 }
-                let format = match format {
-                    Some(wl_shm::Format::Argb8888) => wl_shm::Format::Argb8888,
-                    Some(wl_shm::Format::Xrgb8888) => wl_shm::Format::Xrgb8888,
-                    _ => {
-                        proxy.destroy();
-                        return;
-                    }
-                };
+                    let format = match format {
+                        Some(wl_shm::Format::Argb8888) => wl_shm::Format::Argb8888,
+                        Some(wl_shm::Format::Xrgb8888) => wl_shm::Format::Xrgb8888,
+                        _ => {
+                            eprintln!("hyprland-export: unsupported shm format; skipping thumbnail");
+                            proxy.destroy();
+                            return;
+                        }
+                    };
 
                 let size = (stride * height) as usize;
                 let pool = state.ensure_slot_pool(size);
@@ -427,6 +434,7 @@ impl Dispatch<hyprland_toplevel_export_frame_v1::HyprlandToplevelExportFrameV1, 
                 state.pending_frames.remove(&id);
             }
             hyprland_toplevel_export_frame_v1::Event::Failed => {
+                eprintln!("hyprland-export: capture failed for a toplevel");
                 proxy.destroy();
                 state.pending_frames.remove(&id);
             }
