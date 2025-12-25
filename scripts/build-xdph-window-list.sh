@@ -28,9 +28,8 @@ if [[ -z "${json_output}" ]]; then
   exit 1
 fi
 
-printf "%s" "${json_output}" | python3 - <<'PY'
+printf "%s" "${json_output}" | python3 -c '
 import json, sys
-
 clients = json.load(sys.stdin)
 parts = []
 for c in clients:
@@ -43,6 +42,5 @@ for c in clients:
         handle_lo = 0
     mapped_id = 0
     parts.append(f"{handle_lo}[HC>]{cls}[HT>]{title}[HE>]{mapped_id}[HA>]")
-
 print("".join(parts))
-PY
+'
