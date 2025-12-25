@@ -76,7 +76,7 @@ Add the following to the **xdg-desktop-portal-hyprland** config at `~/.config/hy
 ```
 screencopy {
     allow_token_by_default = true
-    custom_picker_binary = /home/butterfly/.local/bin/hyprland-better-share-picker
+    custom_picker_binary = /home/you/.local/bin/hyprland-better-share-picker
 }
 ```
 
