@@ -45,7 +45,7 @@ The custom `hyprland-toplevel-export-v1.xml` protocol is compiled at build time.
 - We currently accept **`wl_shm` buffers** (`ARGB8888` / `XRGB8888`). DMA‑BUF support can be added later if your compositor only exposes GPU buffers.
 
 ### Matching Strategy (and limitations)
-The portal only provides **lower 32‑bit handles** plus class/title strings. The export protocol does not expose the toplevel handle in its frame metadata. As a result, thumbnails are matched by **(class, title)**, which can be ambiguous when multiple windows share the same title or when titles change frequently. This is a known limitation in the current prototype.
+The portal only provides **lower 32‑bit handles** plus class/title strings. The export protocol does not expose the toplevel handle in its frame metadata. As a result, thumbnails are matched by **(class, title)**. When duplicates exist, we preserve the **order of appearance** in the portal list and match it against the **order of toplevel announcements** from `zwlr_foreign_toplevel_manager_v1`. This is a best‑effort heuristic and can still fail if titles drift or if the compositor’s enumeration order changes.
 
 ### Lazy Loading
 To avoid flooding the compositor, each toplevel is captured **once** on discovery. This provides a responsive UI without the load of continuous screencopy or live previews. This is intentionally conservative and can be extended with a “refresh” action if needed.

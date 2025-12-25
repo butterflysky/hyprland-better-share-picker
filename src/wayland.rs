@@ -29,6 +29,8 @@ pub enum WaylandEvent {
     Thumbnail {
         title: String,
         app_id: String,
+        group_index: usize,
+        group_size: usize,
         width: u32,
         height: u32,
         rgba: Vec<u8>,
@@ -121,6 +123,7 @@ struct WaylandState {
     pending_frames: HashMap<u32, PendingFrame>,
     slot_pool: Option<SlotPool>,
     slot_pool_size: usize,
+    announce_counter: u64,
 }
 
 impl WaylandState {
@@ -139,6 +142,7 @@ impl WaylandState {
             pending_frames: HashMap::new(),
             slot_pool: None,
             slot_pool_size: 0,
+            announce_counter: 0,
         }
     }
 
@@ -196,15 +200,32 @@ impl WaylandState {
     }
 
     fn send_thumbnail(&self, id: u32, width: u32, height: u32, rgba: Vec<u8>) {
-        if let Some(entry) = self.toplevels.get(&id) {
-            let _ = self.sender.unbounded_send(WaylandEvent::Thumbnail {
-                title: entry.title.clone(),
-                app_id: entry.app_id.clone(),
-                width,
-                height,
-                rgba,
-            });
-        }
+        let Some(entry) = self.toplevels.get(&id) else { return };
+        let key_app = entry.app_id.clone();
+        let key_title = entry.title.clone();
+
+        let mut matching: Vec<&ToplevelEntry> = self
+            .toplevels
+            .values()
+            .filter(|e| e.app_id == key_app && e.title == key_title)
+            .collect();
+        matching.sort_by_key(|e| e.announce_order);
+
+        let group_size = matching.len();
+        let group_index = matching
+            .iter()
+            .position(|e| e.announce_order == entry.announce_order)
+            .unwrap_or(0);
+
+        let _ = self.sender.unbounded_send(WaylandEvent::Thumbnail {
+            title: key_title,
+            app_id: key_app,
+            group_index,
+            group_size,
+            width,
+            height,
+            rgba,
+        });
     }
 
     fn send_remove(&self, id: u32) {
@@ -217,6 +238,7 @@ struct ToplevelEntry {
     title: String,
     app_id: String,
     captured: bool,
+    announce_order: u64,
 }
 
 struct PendingFrame {
@@ -276,7 +298,9 @@ impl Dispatch<zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1, ()
                     title: String::new(),
                     app_id: String::new(),
                     captured: false,
+                    announce_order: state.announce_counter,
                 };
+                state.announce_counter += 1;
                 state.toplevels.insert(id, entry);
                 state.send_upsert(id, "", "");
                 if let Some(entry) = state.toplevels.get_mut(&id) {

@@ -19,6 +19,8 @@ struct WindowEntry {
     class: String,
     title: String,
     mapped_id: u64,
+    group_index: usize,
+    group_size: usize,
     thumbnail: Option<WindowThumbnail>,
 }
 
@@ -76,15 +78,18 @@ impl App {
             WaylandEvent::Thumbnail {
                 title,
                 app_id,
+                group_index,
+                group_size,
                 width,
                 height,
                 rgba,
             } => {
-                if let Some(existing) = self
-                    .windows
-                    .iter_mut()
-                    .find(|w| w.class == app_id && w.title == title)
-                {
+                if let Some(existing) = self.windows.iter_mut().find(|w| {
+                    w.class == app_id
+                        && w.title == title
+                        && w.group_index == group_index
+                        && w.group_size == group_size
+                }) {
                     existing.thumbnail = Some(WindowThumbnail::new(width, height, rgba));
                 }
             }
@@ -173,6 +178,8 @@ fn parse_window_list() -> Vec<WindowEntry> {
     let raw = std::env::var("XDPH_WINDOW_SHARING_LIST").unwrap_or_default();
     let mut entries = Vec::new();
     let mut input = raw.as_str();
+    let mut counts: std::collections::HashMap<(String, String), usize> = std::collections::HashMap::new();
+    let mut temp = Vec::new();
 
     while let Some(hc) = input.find("[HC>]") {
         let (handle_str, rest) = input.split_at(hc);
@@ -193,15 +200,31 @@ fn parse_window_list() -> Vec<WindowEntry> {
 
         let mapped_id = mapped.trim().parse::<u64>().unwrap_or(0);
 
-        entries.push(WindowEntry {
-            handle_lo,
-            class: class.to_string(),
-            title: title.to_string(),
-            mapped_id,
-            thumbnail: None,
-        });
+        let class = class.to_string();
+        let title = title.to_string();
+        *counts.entry((class.clone(), title.clone())).or_insert(0) += 1;
+        temp.push((handle_lo, class, title, mapped_id));
 
         input = rest;
+    }
+
+    let mut seen: std::collections::HashMap<(String, String), usize> = std::collections::HashMap::new();
+    for (handle_lo, class, title, mapped_id) in temp {
+        let group_key = (class.clone(), title.clone());
+        let group_size = *counts.get(&group_key).unwrap_or(&1);
+        let entry = seen.entry(group_key).or_insert(0);
+        let group_index = *entry;
+        *entry += 1;
+
+        entries.push(WindowEntry {
+            handle_lo,
+            class,
+            title,
+            mapped_id,
+            group_index,
+            group_size,
+            thumbnail: None,
+        });
     }
 
     entries
