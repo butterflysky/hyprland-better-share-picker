@@ -17,10 +17,18 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 if $use_host_exec; then
-  distrobox-host-exec hyprctl clients -j
+  cmd=(distrobox-host-exec hyprctl)
 else
-  hyprctl clients -j
-fi | python3 - <<'PY'
+  cmd=(hyprctl)
+fi
+
+json_output="$("${cmd[@]}" clients -j 2>/dev/null || true)"
+if [[ -z "${json_output}" ]]; then
+  echo "error: hyprctl produced no JSON output" >&2
+  exit 1
+fi
+
+printf "%s" "${json_output}" | python3 - <<'PY'
 import json, sys
 
 clients = json.load(sys.stdin)
