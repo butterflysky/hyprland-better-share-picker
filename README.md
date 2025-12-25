@@ -116,6 +116,7 @@ We target the **latest stable Rust** as of December 25, 2025 (Rust 1.92.0). If a
 - **libxkbcommon missing at link time**: Install the runtime library inside the build/run environment (e.g., inside your `distrobox` container), not just on the host.
 - **Wrong binary path**: The portal uses the literal string path from `xdph.conf`. Absolute paths are safest.
 - **No output on selection**: The picker prints a `[SELECTION]...` line to STDOUT and exits immediately. If you wrap the binary, ensure stdout is not redirected or swallowed.
+- **Enable debug logs**: Set `HBSP_DEBUG=1` (or `true`) to emit thumbnail capture diagnostics to stderr.
 
 ## Testing Helpers
 If you want to launch the picker outside the portal for UI testing, you can populate `XDPH_WINDOW_SHARING_LIST` from live Hyprland clients:
