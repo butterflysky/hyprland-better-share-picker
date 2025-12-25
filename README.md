@@ -69,7 +69,7 @@ Place the binary somewhere on your `PATH` so the portal can discover it. For exa
 install -Dm755 target/release/hyprland-better-share-picker ~/.local/bin/hyprland-better-share-picker
 ```
 
-You can then configure `xdg-desktop-portal-hyprland` to use this binary instead of the default picker. The portal reads a Hyprland config file and expects the `screencopy:custom_picker_binary` key.
+You can then configure `xdg-desktop-portal-hyprland` to use this binary instead of the default picker. The portal reads its own config file and expects the `screencopy:custom_picker_binary` key.
 
 ### Portal configuration (xdg-desktop-portal-hyprland)
 Add the following to the **xdg-desktop-portal-hyprland** config at `~/.config/hypr/xdph.conf` (default path):
@@ -85,6 +85,14 @@ This matches the portal’s invocation path (see the `ScreencopyShared.cpp` pick
 ## Configuration
 No configuration or environment variables are required for the prototype.
 
+## System Dependencies
+`smithay-client-toolkit` links against `libxkbcommon`. Ensure the runtime library is installed **inside the environment you build and run in** (for example, your `distrobox` container).
+
+Common packages:
+- Fedora/Nobara: `libxkbcommon`
+- Arch: `libxkbcommon`
+- Debian/Ubuntu: `libxkbcommon0`
+
 ## Reproducible Builds
 This repository commits `Cargo.lock` to pin dependency versions and minimize surprises across machines or future builds. Use `cargo update` intentionally when you want to move dependency versions forward.
 
@@ -94,6 +102,7 @@ We target the **latest stable Rust** as of December 25, 2025 (Rust 1.92.0). If a
 - **Portal does not call the picker**: Ensure `xdg-desktop-portal-hyprland` is running and you set `screencopy:custom_picker_binary` in `~/.config/hypr/xdph.conf` exactly (key name and spacing matter).
 - **No thumbnails / blank previews**: This prototype only consumes `wl_shm` buffers. If Hyprland exports DMA‑BUF only, you’ll need to add a DMA‑BUF import path.
 - **Protocol file missing**: The build expects `third_party/hyprland-protocols/hyprland-toplevel-export-v1.xml` (vendored) or a project‑root `hyprland-toplevel-export-v1.xml` override. If neither exists, protocol bindings won’t generate.
+- **libxkbcommon missing at link time**: Install the runtime library inside the build/run environment (e.g., inside your `distrobox` container), not just on the host.
 - **Wrong binary path**: The portal uses the literal string path from `xdph.conf`. Absolute paths are safest.
 - **No output on selection**: The picker prints a `wayland:0x...` handle to STDOUT and exits immediately. If you wrap the binary, ensure stdout is not redirected or swallowed.
 
